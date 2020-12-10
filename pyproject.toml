@@ -1,0 +1,37 @@
+[tool.poetry]
+
+name = "bussola_etl_siafe"
+version = "0.1.0"
+description = "Extrair, transformar e carregar dados do Sistema Integrado de Gestão Orçamentária, Financeira e Contábil do Rio de Janeiro."
+
+license = "Apache-2.0"
+
+authors = ["Ministério Público do Estado do Rio de Janeiro <inova@mprj.mp.br>"]
+
+[tool.poetry.dependencies]
+
+python = "^3.8"
+
+# Package's requirements
+minilog = "^1.5"
+selenium = "^3.141.0"
+
+[tool.poetry.dev-dependencies]
+
+black = "==20.8b1"
+flake8 = "*"
+isort = "*"
+mypy = "*"
+pre-commit = "*"
+pytest = "*"
+pytest-cov = "*"
+
+[tool.black]
+
+target-version = ["py36", "py37", "py38"]
+skip-string-normalization = true
+
+[build-system]
+
+requires = ["poetry_core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

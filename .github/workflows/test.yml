@@ -1,0 +1,41 @@
+name: Test
+
+on: 
+  pull_request: {}
+  push:
+    branches: master
+    tags: "*"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.8
+
+      - name: Install dependencies with poetry
+        run: |
+          pip install poetry
+          poetry install
+
+      - run: poetry run isort --recursive --diff .
+      - run: poetry run black --check .
+      - run: poetry run flake8
+      - run: poetry run mypy
+      - run: poetry run pytest --cov --cov-fail-under=100
+
+  docker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build docker image
+        run: docker build . -t bussola_etl_siafe:test
+
+      - name: Smoke test docker image
+        run: |
+          docker run --rm bussola_etl_siafe:test 10
