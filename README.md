@@ -20,7 +20,7 @@ Em sistemas Unix ou MacOS:
 
 ```sh
 python3 -m venv my-env
-source tutorial-env/bin/activate
+source my-env/bin/activate
 pip install python -m pip install git+https://github.com/inova-mprj/bussola-etl-siafe
 ```
 
@@ -28,7 +28,7 @@ No Windows:
 
 ```sh
 python3 -m venv my-env
-tutorial-env\Scripts\activate.bat
+my-env\Scripts\activate.bat
 pip install python -m pip install git+https://github.com/inova-mprj/bussola-etl-siafe
 ```
 
@@ -70,20 +70,21 @@ sudo apt-get install -y chromium-driver \
 Para criar uma conexão com o Módulo Básico do SIAFE-Rio, importe a classe `bussola_etl_siafe.siafe.ConnectionBasic` e crie uma nova conexão com as suas credenciais de acesso ao sistema. O objeto criado possui uma propriedade `driver`, que possui os mesmos métodos da classe [`WebDriver` do Selenium](https://selenium-python.readthedocs.io/api.html#module-selenium.webdriver.chrome.webdriver).
 
 O exemplo a seguir cria uma nova conexão utilizando credenciais hipotéticas e 
+reproduz a mensagem de boas-vindas presente no sistema.
 
 ```python
-from bussola_etl_siafe.siafe import ConnectionBasic
+from bussola_etl_siafe.siafe import SiafeBasic
 
-conn = ConnectionBasic(
+siafe = SiafeBasic(
     user='01010101010',
     password='my-secret-passwd',
     driver_path = '~/chromedriver'
 )
 
-driver = conn.driver
+driver = siafe.driver
 
 # Diga olá!
-greetings = driver.find_element_by_id('pt1:pt_aot1').text
+greetings = driver.greet()
 print(greetings)
 ```
 
