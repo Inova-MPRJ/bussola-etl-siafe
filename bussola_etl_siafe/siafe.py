@@ -1,3 +1,5 @@
+# pylint: disable=fixme, import-error, too-many-arguments
+
 # Copyright 2020 Ministério Público do Estado do Rio de Janeiro
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,54 +18,64 @@
 """Interfaces for interacting with SIAFE-Rio in an automated way.
 
     Rio de Janeiro's Integrated System for Budget Management (SIAFE-Rio) is the
-    main tool for recording, monitoring and enforcing information regarding to 
-    the State of Rio de Janeiro's public budget, assets and financial 
+    main tool for recording, monitoring and enforcing information regarding to
+    the State of Rio de Janeiro's public budget, assets and financial
     execution.
 
-    This module maps SIAFE-Rio web interface to Python classes and 
+    This module maps SIAFE-Rio web interface to Python classes and methods.
 """
 
 
 import os
-import log
 import time
 from datetime import date, timedelta
 from enum import Enum
-from typing import Mapping, Union, Optional
+from typing import Mapping, Optional, Union
 
+import log  # type: ignore
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.common.exceptions import (
+    NoSuchAttributeException,
     StaleElementReferenceException,
-    NoSuchAttributeException
 )
+from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.ui import Select
 
 
-class ConnectionBasic():
+class ThematicPanelsEnum(str, Enum):
+    """Mapping of SIAFE-Rio Basic Module panels to classnames"""
+
+    # PLANNING = PlanningPanel
+    EXECUTION = 'BudgetExecutionPanel'
+    # PROJECTS = ProjectsPanel
+    # HELPERS = 'helpers'
+    # ADMINISTRATION = 'administration'
+    # REPORTS = 'reports'
+
+
+class SiafeBasic:
     """Chrome WebDriver signed in SIAFE-Rio Basic Module.
 
     SIAFE-Rio Basic Module provides the most commonly used information in the
-    system as standardized tables and reports. This class uses the provided 
+    system as standardized tables and reports. This class uses the provided
     credentials and a Chrome WebDriver (controlled by Selenium) to establish a
     connection and sign in the Basic Module, providing an automated interface
     to interact with the system.
-    
+
     Arguments:
-        user: User name or number in SIAFE system (usually, the user's Natural 
+        user: User name or number in SIAFE system (usually, the user's Natural
             Person Registry number - CPF).
         password: User password in SIAFE system.
-        driver_path: Path to the ChromeDriver executable (available at 
+        driver_path: Path to the ChromeDriver executable (available at
             https://sites.google.com/a/chromium.org/chromedriver/downloads).
-        
+
     Keyword Arguments:
         fiscal_year: Fiscal year for budget planning and execution. Defaults to
             the current year.
         timeout: Maximum time to wait for an element while browsing the page
             (in seconds). Defaults to 10 seconds.
-    
+
     Attributes:
-        driver: Chrome WebDriver logged in SIAFE with provided credentials.
         build: SIAFE-Rio current build. Not implemented yet.
         fiscal_year: Fiscal year for budget planning and execution information
             shown in the system.
@@ -75,23 +87,23 @@ class ConnectionBasic():
         version: SIAFE-Rio current version. Not implemented yet.
 
     Raises:
-        NotImplementedError: When a method or attribute that is not 
+        NotImplementedError: When a method or attribute that is not
             implemented yet is called.
-        TimeoutException: If an element cannot be located after the specified 
+        TimeoutException: If an element cannot be located after the specified
             timeout.
     """
-    
+
+    _greeting_statement_id = 'pt1:pt_aot1'
     _login_url: str = 'https://www5.fazenda.rj.gov.br/SiafeRio/faces/login.jsp'
-    _login_form_ids: Mapping[str, str] = {
-        'user_input': 'loginBox:itxUsuario::content',
-        'password_input': 'loginBox:itxSenhaAtual::content',
-        'fiscal_year_select': 'loginBox:cbxExercicio::content',
-        'submit_button': 'loginBox:btnConfirmar',
+    _thematic_tab_ids: Mapping[str, str] = {
+        'planning': 'pt1:pt_np4:0:pt_cni6::disclosureAnchor',
+        'execution': 'pt1:pt_np4:1:pt_cni6::disclosureAnchor',
+        'projects': 'pt1:pt_np4:2:pt_cni6::disclosureAnchor',
+        'helpers': 'pt1:pt_np4:3:pt_cni6::disclosureAnchor',
+        'administration': 'pt1:pt_np4:4:pt_cni6::disclosureAnchor',
+        'reports': 'pt1:pt_np4:5:pt_cni6::disclosureAnchor',
     }
-    _homepage_ids: Mapping[str, str] = {
-        'greeting_statement': 'pt1:pt_aot1',
-    }
-    
+
     def __init__(
         self,
         user: str,
@@ -102,7 +114,7 @@ class ConnectionBasic():
         timeout: int = 10,
     ):
         self.user = user
-        self.__password = password
+        self._password = password
         self.fiscal_year = fiscal_year
         self.timeout = timeout
         log.debug('Starting Chrome WebDriver session...')
@@ -112,106 +124,118 @@ class ConnectionBasic():
         self._login()
         time.sleep(5)
         try:
-            self._greetings = self.driver.find_element_by_id(
-                    self._homepage_ids['greeting_statement']
-            ).text
+            log.info('Connection established:' + self.greet())
         except (StaleElementReferenceException, TimeoutError):
             # Could not find greetings, something has gone wrong
-            driver.close()
-            log.error(
-                'An unexpected error occurred. ' + 
-                'Could not connect to SIAFE-Rio.'
-            )
+            self.close()
+            log.error('An unexpected error occurred. Could not connect to SIAFE-Rio.')
             raise ConnectionError
         else:
             log.info('Successfully signed in SIAFE-Rio Basic module!')
 
     def _login(self):
         """Interact with login form for SIAFE-Rio .
-        
-        Interacts with SIAFE-Rio login form, inputing user credentials, 
+
+        Interacts with SIAFE-Rio login form, inputing user credentials,
         selecting the fiscal year and submiting the form.
         """
+        login_form_ids: Mapping[str, str] = {
+            'user_input': 'loginBox:itxUsuario::content',
+            'password_input': 'loginBox:itxSenhaAtual::content',
+            'fiscal_year_select': 'loginBox:cbxExercicio::content',
+            'submit_button': 'loginBox:btnConfirmar',
+        }
         self.driver.get(self._login_url)
         # insert user
         log.debug('Entering user ID')
-        user_input = self.driver.find_element_by_id(
-            self._login_form_ids['user_input'])
+        user_input = self.driver.find_element_by_id(login_form_ids['user_input'])
         user_input.send_keys(self.user)
         # select fiscal year
         log.debug(f'Selecting fiscal year ({self.fiscal_year})')
         fiscal_year_select = self.driver.find_element_by_id(
-            self._login_form_ids['fiscal_year_select'])
-        Select(fiscal_year_select).select_by_visible_text(
-            str(self.fiscal_year))
+            login_form_ids['fiscal_year_select']
+        )
+        Select(fiscal_year_select).select_by_visible_text(str(self.fiscal_year))
         # try to insert password
-        log.debug('Entering user password')
         for attempt in range(1, 4):
             try:
+                log.debug(f'Entering user password ({attempt}/3)')
                 password_input = self.driver.find_element_by_id(
-                    self._login_form_ids['password_input'])
+                    login_form_ids['password_input']
+                )
                 password_value = password_input.get_attribute('value')
-                assert len(password_value) == len(self.__password)
+                assert len(password_value) == len(self._password)
                 time.sleep(5)
-            except (AssertionError, NoSuchAttributeException) as e:
-                password_input.send_keys(self.__password)
+            except (AssertionError, NoSuchAttributeException):
+                password_input.send_keys(self._password)
         # submit
         log.debug('Submiting credentials')
-        submit_button = self.driver.find_element_by_id(
-            self._login_form_ids['submit_button'])
+        submit_button = self.driver.find_element_by_id(login_form_ids['submit_button'])
         submit_button.click()
         time.sleep(5)
 
-    def greet(self):
+    def greet(self) -> str:
         """Say Hello to user (for checking the connection)"""
-        return self._greetings
+        greetings = self.driver.find_element_by_id(self._greeting_statement_id).text
+        return greetings
+
+    def go_to_panel(self, panel: ThematicPanelsEnum):
+        """Navigate to a thematic panel."""
+        panel_constructor = globals()[panel.value]
+        self = panel_constructor(self.driver)
+
+    def reset(self):
+        """Force driver to go back to initial page."""
+        raise NotImplementedError
+
+    def close(self) -> None:
+        """Close the current connection."""
+        self.driver.close()
 
     @property
     def version(self) -> str:
         """Read only property with the SIAFE-Rio system version."""
         # TODO: get SIAFE-Rio system version in page footer.
         raise NotImplementedError
-        return self._version
+        return self.version
 
     @property
     def build(self) -> int:
         """Read only property with the SIAFE-Rio system build."""
         # TODO: get SIAFE-Rio system version in page footer.
         raise NotImplementedError
-        return self._build
+        return self.build
 
     @property
     def remaining_time(self) -> timedelta:
         """Read only property with the session's remaining time."""
         # TODO: get session's remaining time in page footer.
         raise NotImplementedError
-        return self._remaining_time
+        return self.remaining_time
 
 
-class ConnectionFlexvision():
-    """Chrome WebDriver signed in SIAFE-Rio Flexvision Module.
+class BudgetExecutionPanel(SiafeBasic):
+    """SIAFE-Rio panel for budget execution.
 
-    SIAFE-Rio Flexvision provides tools to query and create custom reports 
-    based on State-level budgetary, financial and patrimonial information, 
-    available in a data cube model.
-    
-    Arguments:
-        user: User name or number in SIAFE system (usually, the user's Natural 
-            Person Registry number - CPF).
-        password: User password in SIAFE system.
-        driver_path: Path to the ChromeDriver executable (available at 
-            https://sites.google.com/a/chromium.org/chromedriver/downloads).
-
-    Raises:
-        NotImplementedError: This class is not implemented yet.
+    This component contains the budgetary and financial execution. The
+    budgetary execution is the usage of credit consigned in the Public Budget
+    or in the Anual Budget Bill (LOA). The financial execution represents the usage of financial resources, to accomplish projects and/or activities
+    attributed to the Budgetary Units by the Public Budget.
     """
 
-    login_url:str = 'http://flexvision.fazenda.rj.gov.br:7002/Flexvision/faces/login.jsp'
+    _subpanel_ids = {
+        'budgetary': 'pt1:pt_np3:0:pt_cni4::disclosureAnchor',
+        'financial': 'pt1:pt_np3:1:pt_cni4::disclosureAnchor',
+        'accountancy': 'pt1:pt_np3:2:pt_cni4::disclosureAnchor',
+        'contracts and covenants': 'pt1:pt_np3:3:pt_cni4::disclosureAnchor',
+    }
 
-    def __init__(
-        self,
-        username: str,
-        password: str,
-        driver_path: Union[str, bytes, os.PathLike]
-    ):
+    def __init__(self, driver: webdriver.Chrome):
+        self.driver = driver
+        _tab_id = super()._thematic_tab_ids['execution']
+        panel_tab = self.driver.find_element_by_id(_tab_id)
+        panel_tab.click()
+
+    def go_to_subpanel(self):
+        """Navigate to one of the budget execution subpanels."""
         raise NotImplementedError

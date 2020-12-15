@@ -1,15 +1,13 @@
-import log
 import os
-from pathlib import Path
 
+import log
 import pytest
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 
-from bussola_etl_siafe.siafe import ConnectionBasic
+from bussola_etl_siafe.siafe import SiafeBasic
 
-
-USER: str = os.getenv('SIAFE_USER')
-PASSWORD: str = os.getenv('SIAFE_PASSWORD')
+USER: str = os.environ['SIAFE_USER']
+PASSWORD: str = os.environ['SIAFE_PASSWORD']
 CHROME_PATH: str = os.getenv('CHROME_PATH', './chromedriver')
 CHROME_OPTIONS = ChromeOptions()
 CHROME_OPTIONS.headless = False
@@ -23,27 +21,26 @@ def test_connect() -> None:
     """Tests whether it is possible to connect and sign in SIAFE-Rio Basic."""
     # create connection
     assert os.path.isfile(CHROME_PATH)
-    conn = ConnectionBasic(
+    siafe = SiafeBasic(
         user=USER,
         password=PASSWORD,
         driver_path=CHROME_PATH,
         driver_options=CHROME_OPTIONS,
     )
-    driver = conn.driver
     # assert that a welcome message is shown
-    print(conn.greet())
-    assert 'Seja bem-vindo(a),' in conn._greetings
-    # assert that fiscal year equals to the current year 
-    # (default behavior when no year is specified)  
-    year_statement = driver.find_element_by_id('pt1:pt_aot2').text
+    greeting = siafe.greet()
+    assert 'Seja bem-vindo(a),' in greeting
+    # assert that fiscal year equals to the current year
+    # (default behavior when no year is specified)
+    year_statement = siafe.driver.find_element_by_id('pt1:pt_aot2').text
     assert year_statement == 'Exercício 2020'
-    # assert that connection throws an exception when unimplemented 
+    # assert that connection throws an exception when unimplemented
     # properties and methods are accessed
     with pytest.raises(NotImplementedError):
-        conn.version
+        siafe.version
     with pytest.raises(NotImplementedError):
-        conn.build
+        siafe.build
     with pytest.raises(NotImplementedError):
-        conn.remaining_time
+        siafe.remaining_time
     # close connection
-    driver.close()
+    siafe.close()
