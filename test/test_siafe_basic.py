@@ -17,16 +17,24 @@ log.init(verbosity=3)
 CHROME_OPTIONS.add_argument("--remote-debugging-port=9515")
 
 
-def test_connect() -> None:
-    """Tests whether it is possible to connect and sign in SIAFE-Rio Basic."""
+@pytest.fixture(scope='module')
+def siafe():
+    """Creates a reusable connection to Siafe Basic"""
     # create connection
-    assert os.path.isfile(CHROME_PATH)
-    siafe = SiafeBasic(
+    conn = SiafeBasic(
         user=USER,
         password=PASSWORD,
         driver_path=CHROME_PATH,
         driver_options=CHROME_OPTIONS,
     )
+    # use connection in tests
+    yield conn
+    # teardown connection after all tests in module finish
+    conn.close()
+
+
+def test_homepage(siafe) -> None:
+    """Tests if it is possible to view SIAFE-Rio homepage after connecting."""
     # assert that a welcome message is shown
     greeting = siafe.greet()
     assert 'Seja bem-vindo(a),' in greeting
@@ -42,5 +50,3 @@ def test_connect() -> None:
         siafe.build
     with pytest.raises(NotImplementedError):
         siafe.remaining_time
-    # close connection
-    siafe.close()
