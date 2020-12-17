@@ -10,7 +10,7 @@ authors = ["Ministério Público do Estado do Rio de Janeiro <inova@mprj.mp.br>"
 
 [tool.poetry.dependencies]
 
-python = "^3.8"
+python = "^3.9"
 
 # Package's requirements
 minilog = "^1.5"

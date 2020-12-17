@@ -29,7 +29,6 @@
 import os
 import time
 from datetime import date, timedelta
-from enum import Enum
 from typing import Mapping, Optional, Union
 
 import log  # type: ignore
@@ -40,17 +39,6 @@ from selenium.common.exceptions import (
 )
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.ui import Select
-
-
-class ThematicPanelsEnum(str, Enum):
-    """Mapping of SIAFE-Rio Basic Module panels to classnames"""
-
-    # PLANNING = PlanningPanel
-    EXECUTION = 'BudgetExecutionPanel'
-    # PROJECTS = ProjectsPanel
-    # HELPERS = 'helpers'
-    # ADMINISTRATION = 'administration'
-    # REPORTS = 'reports'
 
 
 class SiafeBasic:
@@ -95,14 +83,14 @@ class SiafeBasic:
 
     _greeting_statement_id = 'pt1:pt_aot1'
     _login_url: str = 'https://www5.fazenda.rj.gov.br/SiafeRio/faces/login.jsp'
-    _thematic_tab_ids: Mapping[str, str] = {
-        'planning': 'pt1:pt_np4:0:pt_cni6::disclosureAnchor',
-        'execution': 'pt1:pt_np4:1:pt_cni6::disclosureAnchor',
-        'projects': 'pt1:pt_np4:2:pt_cni6::disclosureAnchor',
-        'helpers': 'pt1:pt_np4:3:pt_cni6::disclosureAnchor',
-        'administration': 'pt1:pt_np4:4:pt_cni6::disclosureAnchor',
-        'reports': 'pt1:pt_np4:5:pt_cni6::disclosureAnchor',
-    }
+    # _thematic_tab_ids: Mapping[str, str] = {
+    #     'planning': 'pt1:pt_np4:0:pt_cni6::disclosureAnchor',
+    #     'execution': 'pt1:pt_np4:1:pt_cni6::disclosureAnchor',
+    #     'projects': 'pt1:pt_np4:2:pt_cni6::disclosureAnchor',
+    #     'helpers': 'pt1:pt_np4:3:pt_cni6::disclosureAnchor',
+    #     'administration': 'pt1:pt_np4:4:pt_cni6::disclosureAnchor',
+    #     'reports': 'pt1:pt_np4:5:pt_cni6::disclosureAnchor',
+    # }
 
     def __init__(
         self,
@@ -120,6 +108,7 @@ class SiafeBasic:
         log.debug('Starting Chrome WebDriver session...')
         self.driver = webdriver.Chrome(driver_path, options=driver_options)
         self.driver.implicitly_wait(self.timeout)
+        self.driver.set_window_size(3840, 2160)
         log.info('Connecting to SIAFE-Rio Basic Module...')
         self._login()
         time.sleep(5)
@@ -179,11 +168,6 @@ class SiafeBasic:
         greetings = self.driver.find_element_by_id(self._greeting_statement_id).text
         return greetings
 
-    def go_to_panel(self, panel: ThematicPanelsEnum):
-        """Navigate to a thematic panel."""
-        panel_constructor = globals()[panel.value]
-        self = panel_constructor(self.driver)
-
     def reset(self):
         """Force driver to go back to initial page."""
         raise NotImplementedError
@@ -223,6 +207,7 @@ class BudgetExecutionPanel(SiafeBasic):
     attributed to the Budgetary Units by the Public Budget.
     """
 
+    _tab_id = 'pt1:pt_np4:1:pt_cni6::disclosureAnchor'
     _subpanel_ids = {
         'budgetary': 'pt1:pt_np3:0:pt_cni4::disclosureAnchor',
         'financial': 'pt1:pt_np3:1:pt_cni4::disclosureAnchor',
@@ -230,12 +215,15 @@ class BudgetExecutionPanel(SiafeBasic):
         'contracts and covenants': 'pt1:pt_np3:3:pt_cni4::disclosureAnchor',
     }
 
-    def __init__(self, driver: webdriver.Chrome):
-        self.driver = driver
-        _tab_id = super()._thematic_tab_ids['execution']
-        panel_tab = self.driver.find_element_by_id(_tab_id)
-        panel_tab.click()
+    def __init__(self, connection: SiafeBasic):
+        self.driver = connection.driver
+        tab = self.driver.find_element_by_id(self._tab_id)
+        tab.click()
 
-    def go_to_subpanel(self):
-        """Navigate to one of the budget execution subpanels."""
-        raise NotImplementedError
+    @property
+    def description(self):
+        """Panel description"""
+        self._description = self.driver.find_element_by_xpath(
+            r"//div[@id='pt1:pt_pgl4::c']/span"
+        ).text
+        return self._description

@@ -4,13 +4,13 @@ import log
 import pytest
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 
-from bussola_etl_siafe.siafe import SiafeBasic
+from bussola_etl_siafe.siafe import BudgetExecutionPanel, SiafeBasic
 
 USER: str = os.environ['SIAFE_USER']
 PASSWORD: str = os.environ['SIAFE_PASSWORD']
 CHROME_PATH: str = os.getenv('CHROME_PATH', './chromedriver')
 CHROME_OPTIONS = ChromeOptions()
-CHROME_OPTIONS.headless = False
+CHROME_OPTIONS.headless = True
 
 
 log.init(verbosity=3)
@@ -50,3 +50,11 @@ def test_homepage(siafe) -> None:
         siafe.build
     with pytest.raises(NotImplementedError):
         siafe.remaining_time
+
+
+def test_budget_execution(siafe) -> None:
+    """Tests getting the budget execution panel."""
+    panel = BudgetExecutionPanel(connection=siafe)
+    descr = panel.description
+    print(descr)
+    assert 'Este módulo permite a execução orçamentária e financeira.' in descr
