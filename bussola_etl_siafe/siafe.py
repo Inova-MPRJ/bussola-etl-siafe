@@ -42,7 +42,7 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.ui import Select
 
 
-class SiafeBasic:
+class SiafeClient:
     """Chrome WebDriver signed in SIAFE-Rio Basic Module.
 
     SIAFE-Rio Basic Module provides the most commonly used information in the
@@ -304,7 +304,7 @@ class SiafeBasic:
         return self.remaining_time
 
 
-class BudgetExecutionPanel(SiafeBasic):
+class BudgetExecutionPanel(SiafeClient):
     """SIAFE-Rio panel for budget execution.
 
     This component contains the budgetary and financial execution. The
@@ -321,8 +321,8 @@ class BudgetExecutionPanel(SiafeBasic):
         'contracts and covenants': 'pt1:pt_np3:3:pt_cni4::disclosureAnchor',
     }
 
-    def __init__(self, connection: SiafeBasic):
-        self.driver = connection.driver
+    def __init__(self, client: SiafeClient):
+        self.driver = client.driver
         tab = self.driver.find_element_by_id(self._tab_id)
         for attempt in range(1, 4):
             tab.click()  # access budget execution tab

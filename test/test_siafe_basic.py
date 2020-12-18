@@ -4,7 +4,7 @@ import log
 import pytest
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 
-from bussola_etl_siafe.siafe import BudgetExecutionPanel, SiafeBasic
+from bussola_etl_siafe.siafe import BudgetExecutionPanel, SiafeClient
 
 USER: str = os.environ['SIAFE_USER']
 PASSWORD: str = os.environ['SIAFE_PASSWORD']
@@ -22,16 +22,16 @@ CHROME_OPTIONS.add_argument("--remote-debugging-port=9515")
 def siafe():
     """Creates a reusable connection to Siafe Basic"""
     # create connection
-    conn = SiafeBasic(
+    client = SiafeClient(
         user=USER,
         password=PASSWORD,
         driver_path=CHROME_PATH,
         driver_options=CHROME_OPTIONS,
     )
     # use connection in tests
-    yield conn
+    yield client
     # teardown connection after all tests in module finish
-    conn.close()
+    client.close()
 
 
 def test_homepage(siafe) -> None:
@@ -57,7 +57,7 @@ def test_homepage(siafe) -> None:
 
 def test_budget_execution(siafe) -> None:
     """Tests getting the budget execution panel."""
-    panel = BudgetExecutionPanel(connection=siafe)
+    panel = BudgetExecutionPanel(client=siafe)
     descr = panel.description
     print(descr)
     assert 'Este módulo permite a execução orçamentária e financeira.' in descr

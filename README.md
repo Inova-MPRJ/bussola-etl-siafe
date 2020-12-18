@@ -67,15 +67,15 @@ sudo apt-get install -y chromium-driver \
 
 ## Uso
 
-Para criar uma conexão com o Módulo Básico do SIAFE-Rio, importe a classe `bussola_etl_siafe.siafe.ConnectionBasic` e crie uma nova conexão com as suas credenciais de acesso ao sistema. O objeto criado possui uma propriedade `driver`, que possui os mesmos métodos da classe [`WebDriver` do Selenium](https://selenium-python.readthedocs.io/api.html#module-selenium.webdriver.chrome.webdriver).
+Para criar uma conexão com o Módulo Básico do SIAFE-Rio, importe a classe `bussola_etl_siafe.siafe.SiafeClient` e crie uma nova conexão com as suas credenciais de acesso ao sistema. O objeto criado possui uma propriedade `driver`, que possui os mesmos métodos da classe [`WebDriver` do Selenium](https://selenium-python.readthedocs.io/api.html#module-selenium.webdriver.chrome.webdriver).
 
 O exemplo a seguir cria uma nova conexão utilizando credenciais hipotéticas e 
 reproduz a mensagem de boas-vindas presente no sistema.
 
 ```python
-from bussola_etl_siafe.siafe import SiafeBasic
+from bussola_etl_siafe.siafe import SiafeClient
 
-siafe = SiafeBasic(
+siafe = SiafeClient(
     user='01010101010',
     password='my-secret-passwd',
     driver_path = '~/chromedriver'
