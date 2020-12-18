@@ -61,6 +61,9 @@ def test_execution(siafe) -> None:
     descr = panel.description
     print(descr)
     assert 'Este módulo permite a execução orçamentária e financeira.' in descr
+    for subpanel_id in panel._subpanel_ids.values():
+        subpanel_tab = panel.driver.find_element_by_id(subpanel_id)
+        assert subpanel_tab.is_displayed()
 
 
 def test_budget_execution(siafe) -> None:
