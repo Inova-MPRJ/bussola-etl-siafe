@@ -11,6 +11,7 @@ PASSWORD: str = os.environ['SIAFE_PASSWORD']
 CHROME_PATH: str = os.getenv('CHROME_PATH', './chromedriver')
 CHROME_OPTIONS = ChromeOptions()
 CHROME_OPTIONS.headless = True
+FECAM_CODE: str = '240400'
 
 
 log.init(verbosity=3)
@@ -42,6 +43,8 @@ def test_homepage(siafe) -> None:
     # (default behavior when no year is specified)
     year_statement = siafe.driver.find_element_by_id('pt1:pt_aot2').text
     assert year_statement == 'Exercício 2020'
+    assert siafe.ug['name'] == 'TODAS'
+    # TODO: replace with assertions, when properties are implemented
     # assert that connection throws an exception when unimplemented
     # properties and methods are accessed
     with pytest.raises(NotImplementedError):
@@ -58,3 +61,17 @@ def test_budget_execution(siafe) -> None:
     descr = panel.description
     print(descr)
     assert 'Este módulo permite a execução orçamentária e financeira.' in descr
+
+
+def test_get_available_ugs(siafe) -> None:
+    """Tests getting available budget Management Units (UGs)."""
+    available_ugs = siafe.available_ugs
+    assert {'id': FECAM_CODE, 'name': 'FECAM'} in available_ugs
+
+
+def test_set_ug(siafe) -> None:
+    """Tests changing current budget Management Unit (UG)."""
+    siafe.set_ug(ug_code=FECAM_CODE)
+    ug = siafe.ug
+    assert ug['id'] == FECAM_CODE
+    assert ug['name'] == 'FECAM'

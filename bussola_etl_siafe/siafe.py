@@ -27,9 +27,10 @@
 
 
 import os
+import re
 import time
 from datetime import date, timedelta
-from typing import Mapping, Optional, Union
+from typing import Mapping, Optional, Sequence, Union
 
 import log  # type: ignore
 from selenium import webdriver
@@ -82,6 +83,7 @@ class SiafeBasic:
     """
 
     _greeting_statement_id = 'pt1:pt_aot1'
+    _ug_select_id = 'pt1:selUg::content'
     _login_url: str = 'https://www5.fazenda.rj.gov.br/SiafeRio/faces/login.jsp'
     # _thematic_tab_ids: Mapping[str, str] = {
     #     'planning': 'pt1:pt_np4:0:pt_cni6::disclosureAnchor',
@@ -177,6 +179,110 @@ class SiafeBasic:
         self.driver.close()
 
     @property
+    def available_ugs(self) -> Sequence[Mapping[str, str]]:
+        """Get available Managemet Units (UGs)."""
+        log.info('Checking available budget Management Units...')
+        ug_select = Select(self.driver.find_element_by_id(self._ug_select_id))
+        ug_options = ug_select.options
+        # UG visible text has the format '999999 - NAME OF THE UNIT'; split it
+        ugs_splitted = [
+            re.split(' +- +', ug_option.text, 1) for ug_option in ug_options
+        ]
+        # create a dict with UG name and id for each one
+        available_ugs = list()
+        for ug_splitted in ugs_splitted:
+            if ug_splitted[0] == 'TODAS':
+                # 'ALL' budget management units option
+                available_ugs.append({'id': '000000', 'name': 'TODAS'})
+            else:
+                available_ugs.append({'id': ug_splitted[0], 'name': ug_splitted[1]})
+        # make available units accessible instance-wide
+        self._available_ugs = available_ugs
+        return self._available_ugs
+
+    @property
+    def ug(self) -> Mapping[str, str]:
+        """Get current budget Management Unit (UG)."""
+        log.info('Checking current Management Unit...')
+        # current unit appears in the "title" attribute of the <select> element
+        ug_select = self.driver.find_element_by_id(self._ug_select_id)
+        ug_select_title = ug_select.get_attribute('title')
+        if ug_select_title == 'TODAS':
+            # 'ALL' budget management units option is selected (default)
+            self._ug = {'id': '000000', 'name': 'TODAS'}
+            return self._ug
+        # A specific UG has been selected.
+        # UG statement has the format '999999 - NAME OF THE UNIT'; split it
+        ug_splitted = re.split(r' +- +', ug_select_title, 1)
+        self._ug = {'id': ug_splitted[0], 'name': ug_splitted[1]}
+        return self._ug
+
+    def set_ug(self, ug_code: str = r'[0-9]{6}', ug_name: str = r'.*') -> None:
+        """Set the desired Management Unit (UG).
+
+        Arguments:
+            ug_code: Six-digit numeric code of the budget Management Unit (UG).
+            ug_name: Name of the budget Management Unit (UG), or a Perl-like
+                regular expression for seaching for it (see
+                docs.python.org/3/library/re for accepted expressions).
+
+        Raises:
+            ValueError: When no Management Unit is found for given code and/or
+            name, or when multiple are found.
+
+        Note:
+            Please note that UG names are always uppercase. This method does
+            not enforce this, as it might cause unexpected behaviors when
+            using special sequences in regex.
+
+        Warning:
+            Currently, the budget Management Unit (UG) can be set only *after*
+            the desired panel has been selected.
+        """
+        log.info('Changing budget Management Unit (UG)...')
+        # find select menu in page
+        ug_select = Select(self.driver.find_element_by_id(self._ug_select_id))
+        # set 'ALL' management units option
+        if ug_code == '000000' or ug_name.upper() == 'TODAS':
+            log.debug('Selected ALL Management Units.')
+            ug_select.select_by_visible_text('TODAS')
+            self._ug = {'000000': 'TODAS'}
+            log.info('Successfully set current view to all Management Units.')
+            return
+        # search option text that matches the given code and/or name
+        log.debug('Searching Management Units that match the given pattern...')
+        regexpr = re.compile(ug_code + r' +- +' + ug_name)
+        ug_options = ug_select.options
+        ug_options_texts = [ug_option.text for ug_option in ug_options]
+        target_options_texts = list(filter(regexpr.match, ug_options_texts))
+        # manage when number of matches != 1
+        if len(target_options_texts) == 0:
+            log.error('No budget Management Unit was found with given criteria')
+            raise ValueError
+        elif len(target_options_texts) > 1:
+            log.error(
+                'Multiple budget Management Units were found with given'
+                + 'criteria:'
+                + '\n'.join(target_options_texts)
+            )
+            raise ValueError
+        else:
+            # found one match. Now change in webdriver
+            log.debug('Found exactly one match. Selecting...')
+            ug_select.select_by_visible_text(target_options_texts[0])
+            # update instance's UG attribute
+            log.debug("Option selected. Updating client's attributes...")
+            ug_splitted = re.split(r' +- +', target_options_texts[0], 1)
+            self._ug = {'id': ug_splitted[0], 'name': ug_splitted[1]}
+            log.info(
+                'Successfully set current view to Management Unit '
+                + self._ug['id']
+                + ' - '
+                + self._ug['name']
+            )
+            return
+
+    @property
     def version(self) -> str:
         """Read only property with the SIAFE-Rio system version."""
         # TODO: get SIAFE-Rio system version in page footer.
@@ -218,7 +324,21 @@ class BudgetExecutionPanel(SiafeBasic):
     def __init__(self, connection: SiafeBasic):
         self.driver = connection.driver
         tab = self.driver.find_element_by_id(self._tab_id)
-        tab.click()
+        for attempt in range(1, 4):
+            tab.click()  # access budget execution tab
+            try:
+                self.description  # check that panel description appeared
+                break
+            except StaleElementReferenceException:
+                if attempt < 3:
+                    log.debug(
+                        'Could not access budget execution. '
+                        + f'Try again... (attempt {attempt}/3)'
+                    )
+                    continue  # did not appear. Try again.
+                else:
+                    log.error('Could not access budget execution.')
+                    raise
 
     @property
     def description(self):
