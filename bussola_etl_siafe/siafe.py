@@ -304,8 +304,8 @@ class SiafeClient:
         return self.remaining_time
 
 
-class BudgetExecutionPanel(SiafeClient):
-    """SIAFE-Rio panel for budget execution.
+class ExecutionPanel(SiafeClient):
+    """SIAFE-Rio panel for budgetary and financial execution.
 
     This component contains the budgetary and financial execution. The
     budgetary execution is the usage of credit consigned in the Public Budget

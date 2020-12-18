@@ -4,7 +4,7 @@ import log
 import pytest
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 
-from bussola_etl_siafe.siafe import BudgetExecutionPanel, SiafeClient
+from bussola_etl_siafe.siafe import ExecutionPanel, SiafeClient
 
 USER: str = os.environ['SIAFE_USER']
 PASSWORD: str = os.environ['SIAFE_PASSWORD']
@@ -57,7 +57,7 @@ def test_homepage(siafe) -> None:
 
 def test_budget_execution(siafe) -> None:
     """Tests getting the budget execution panel."""
-    panel = BudgetExecutionPanel(client=siafe)
+    panel = ExecutionPanel(client=siafe)
     descr = panel.description
     print(descr)
     assert 'Este módulo permite a execução orçamentária e financeira.' in descr
