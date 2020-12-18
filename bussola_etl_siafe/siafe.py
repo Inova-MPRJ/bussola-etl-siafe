@@ -309,7 +309,8 @@ class ExecutionPanel(SiafeClient):
 
     This component contains the budgetary and financial execution. The
     budgetary execution is the usage of credit consigned in the Public Budget
-    or in the Anual Budget Bill (LOA). The financial execution represents the usage of financial resources, to accomplish projects and/or activities
+    or in the Anual Budget Bill (LOA). The financial execution represents the
+    usage of financial resources, to accomplish projects and/or activities
     attributed to the Budgetary Units by the Public Budget.
     """
 
@@ -347,3 +348,28 @@ class ExecutionPanel(SiafeClient):
             r"//div[@id='pt1:pt_pgl4::c']/span"
         ).text
         return self._description
+
+
+class BudgetExecutionSubpanel(ExecutionPanel):
+    """SIAFE-Rio subpanel for budgetary execution.
+
+    Budget execution is the usage of credits consigned by the Public Budget or
+    the Anual Budget Bill (LOA).
+    """
+
+    _component_ids = {
+        'allocation_details': 'pt1:pt_np2:0:pt_cni3',
+        'quota_releasing': 'pt1:pt_np2:1:pt_cni3',
+        'credit_descentralization': 'pt1:pt_np2:2:pt_cni3',
+        'credit_note': 'pt1:pt_np2:3:pt_cni3',
+        'allocation_note': 'pt1:pt_np2:4:pt_cni3',
+        'commitment_note': 'pt1:pt_np2:5:pt_cni3',
+        'liquidation_note': 'pt1:pt_np2:6:pt_cni3',
+        'reservation_note': 'pt1:pt_np2:7:pt_cni3',
+        'predicted_revenue': 'pt1:pt_np2:8:pt_cni3',
+    }
+
+    def __init__(self, client: SiafeClient):
+        ExecutionPanel.__init__(self, client)
+        subpanel_tab = self.driver.find_element_by_id(self._subpanel_ids['budgetary'])
+        subpanel_tab.click()

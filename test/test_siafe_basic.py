@@ -4,7 +4,7 @@ import log
 import pytest
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 
-from bussola_etl_siafe.siafe import ExecutionPanel, SiafeClient
+from bussola_etl_siafe.siafe import BudgetExecutionSubpanel, ExecutionPanel, SiafeClient
 
 USER: str = os.environ['SIAFE_USER']
 PASSWORD: str = os.environ['SIAFE_PASSWORD']
@@ -55,12 +55,23 @@ def test_homepage(siafe) -> None:
         siafe.remaining_time
 
 
-def test_budget_execution(siafe) -> None:
-    """Tests getting the budget execution panel."""
+def test_execution(siafe) -> None:
+    """Tests getting the budgetary and financial execution panel."""
     panel = ExecutionPanel(client=siafe)
     descr = panel.description
     print(descr)
     assert 'Este módulo permite a execução orçamentária e financeira.' in descr
+
+
+def test_budget_execution(siafe) -> None:
+    """Tests getting the budgetary execution subpanel."""
+    subpanel = BudgetExecutionSubpanel(client=siafe)
+    descr = subpanel.description
+    print(descr)
+    assert 'A execução orçamentária é a utilização dos créditos' in descr
+    for component_id in subpanel._component_ids.values():
+        component_link = subpanel.driver.find_element_by_id(component_id)
+        assert component_link.is_displayed()
 
 
 def test_get_available_ugs(siafe) -> None:
