@@ -1,21 +1,32 @@
 import os
+from datetime import date
+from pathlib import Path
 
 import log
 import pytest
-from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.chrome.options import Options
 
-from bussola_etl_siafe.siafe import BudgetExecutionSubpanel, ExecutionPanel, SiafeClient
+from bussola_etl_siafe.components.filters import Filter
+from bussola_etl_siafe.siafe import (
+    BudgetExecutionSubpanel,
+    CommitmentNotesTable,
+    ExecutionPanel,
+    SiafeClient,
+)
 
+REPO_ROOT = Path(os.path.realpath(__file__)).parent.parent
 USER: str = os.environ['SIAFE_USER']
 PASSWORD: str = os.environ['SIAFE_PASSWORD']
-CHROME_PATH: str = os.getenv('CHROME_PATH', './chromedriver')
-CHROME_OPTIONS = ChromeOptions()
-CHROME_OPTIONS.headless = True
 FECAM_CODE: str = '240400'
+BUDGET_SOURCE: str = "104"
 
+DRIVER_PATH = os.getenv('CHROME_PATH', os.path.join(REPO_ROOT, "chromedriver"))
+DRIVER_OPTIONS = Options()
+DRIVER_OPTIONS.add_argument("--remote-debugging-port=9515")
+
+DRIVER_OPTIONS.headless = False
 
 log.init(verbosity=3)
-CHROME_OPTIONS.add_argument("--remote-debugging-port=9515")
 
 
 @pytest.fixture(scope='module')
@@ -25,13 +36,21 @@ def siafe():
     client = SiafeClient(
         user=USER,
         password=PASSWORD,
-        driver_path=CHROME_PATH,
-        driver_options=CHROME_OPTIONS,
+        driver_path=DRIVER_PATH,
+        driver_options=DRIVER_OPTIONS,
     )
-    # use connection in tests
-    yield client
-    # teardown connection after all tests in module finish
-    client.close()
+    try:
+        # use connection in tests
+        yield client
+    finally:
+        # teardown connection after all tests in module finish
+        client.close()
+
+
+@pytest.fixture(scope="module")
+def commitment_note_page(siafe):
+    page = CommitmentNotesTable(client=siafe)
+    return page
 
 
 def test_homepage(siafe) -> None:
@@ -42,7 +61,7 @@ def test_homepage(siafe) -> None:
     # assert that fiscal year equals to the current year
     # (default behavior when no year is specified)
     year_statement = siafe.driver.find_element_by_id('pt1:pt_aot2').text
-    assert year_statement == 'Exercício 2020'
+    assert year_statement == 'Exercício ' + str(date.today().year)
     assert siafe.ug['name'] == 'TODAS'
     # TODO: replace with assertions, when properties are implemented
     # assert that connection throws an exception when unimplemented
@@ -72,20 +91,59 @@ def test_budget_execution(siafe) -> None:
     descr = subpanel.description
     print(descr)
     assert 'A execução orçamentária é a utilização dos créditos' in descr
-    for component_id in subpanel._component_ids.values():
-        component_link = subpanel.driver.find_element_by_id(component_id)
-        assert component_link.is_displayed()
+    for table_id in subpanel._table_ids.values():
+        table_link = subpanel.driver.find_element_by_id(table_id)
+        assert table_link.is_displayed()
 
 
-def test_get_available_ugs(siafe) -> None:
-    """Tests getting available budget Management Units (UGs)."""
-    available_ugs = siafe.available_ugs
-    assert {'id': FECAM_CODE, 'name': 'FECAM'} in available_ugs
+def test_commitment_table(commitment_note_page) -> None:
+    """Tests fetching the commitment notes table."""
+    assert not commitment_note_page.limit
+    headers = commitment_note_page.properties
+    assert 'Número' in headers
+    assert 'Credor' in headers
+    assert 'Valor' in headers
 
 
-def test_set_ug(siafe) -> None:
-    """Tests changing current budget Management Unit (UG)."""
-    siafe.set_ug(ug_code=FECAM_CODE)
-    ug = siafe.ug
-    assert ug['id'] == FECAM_CODE
-    assert ug['name'] == 'FECAM'
+def test_empty_filters(commitment_note_page) -> None:
+    """Tests checking for filters when none was set yet."""
+    filters = commitment_note_page.filter_menu.filters
+    print(filters)
+    assert isinstance(filters, list)
+    assert len(filters) == 0
+
+
+def test_set_filters(commitment_note_page) -> None:
+    """Test applying a new filter to the commitment notes table."""
+    new_filter = Filter(
+        filtered_property="Fonte", operation="igual", value=BUDGET_SOURCE
+    )
+    commitment_note_page.filter_menu.filters = new_filter
+    commitment_note_page.filter_menu.apply()
+    assert (
+        new_filter in commitment_note_page.filter_menu.filters  # type:ignore
+    )
+    # BUG: for some reason, mypy thinks filter_menu.filters is a Filter, not
+    # a list of Filters. May be related to
+    # https://github.com/python/mypy/issues/3004
+
+
+# def test_commitment_records(siafe) -> None:
+#     """Tests reading commitment notes records from screen."""
+#     table = CommitmentNotesTable(client=siafe)
+#     records = table.records
+#     assert len(records) > 0
+
+
+# def test_get_available_ugs(siafe) -> None:
+#     """Tests getting available budget Management Units (UGs)."""
+#     available_ugs = siafe.available_ugs
+#     assert {'id': FECAM_CODE, 'name': 'FECAM'} in available_ugs
+
+
+# def test_set_ug(siafe) -> None:
+#     """Tests changing current budget Management Unit (UG)."""
+#     siafe.set_ug(ug_code=FECAM_CODE)
+#     ug = siafe.ug
+#     assert ug['id'] == FECAM_CODE
+#     assert ug['name'] == 'FECAM'

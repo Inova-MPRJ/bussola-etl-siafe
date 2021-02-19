@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """Interfaces for interacting with SIAFE-Rio in an automated way.
 
     Rio de Janeiro's Integrated System for Budget Management (SIAFE-Rio) is the
@@ -25,21 +24,29 @@
     This module maps SIAFE-Rio web interface to Python classes and methods.
 """
 
-
 import os
 import re
+import sys
 import time
 from datetime import date, timedelta
+from functools import cached_property
 from typing import Mapping, Optional, Sequence, Union
 
 import log  # type: ignore
+from dotenv import load_dotenv
 from selenium import webdriver
-from selenium.common.exceptions import (
+from selenium.common.exceptions import (  # NoSuchElementException,
     NoSuchAttributeException,
     StaleElementReferenceException,
 )
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.ui import Select
+
+from bussola_etl_siafe.components.filters import FilterMenu
+
+load_dotenv("../.env")
+
+sys.path.append(os.environ["CHROME_PATH"])
 
 
 class SiafeClient:
@@ -107,22 +114,24 @@ class SiafeClient:
         self._password = password
         self.fiscal_year = fiscal_year
         self.timeout = timeout
+
         log.debug('Starting Chrome WebDriver session...')
         self.driver = webdriver.Chrome(driver_path, options=driver_options)
         self.driver.implicitly_wait(self.timeout)
         self.driver.set_window_size(3840, 2160)
+
         log.info('Connecting to SIAFE-Rio Basic Module...')
-        self._login()
-        time.sleep(5)
         try:
-            log.info('Connection established:' + self.greet())
+            self._login()
         except (StaleElementReferenceException, TimeoutError):
             # Could not find greetings, something has gone wrong
             self.close()
-            log.error('An unexpected error occurred. Could not connect to SIAFE-Rio.')
+            log.error(
+                'An unexpected error occurred. Could not connect to SIAFE-Rio.'
+            )
             raise ConnectionError
         else:
-            log.info('Successfully signed in SIAFE-Rio Basic module!')
+            log.info('Successfully signed in SIAFE-Rio Basic module.')
 
     def _login(self):
         """Interact with login form for SIAFE-Rio .
@@ -139,14 +148,18 @@ class SiafeClient:
         self.driver.get(self._login_url)
         # insert user
         log.debug('Entering user ID')
-        user_input = self.driver.find_element_by_id(login_form_ids['user_input'])
+        user_input = self.driver.find_element_by_id(
+            login_form_ids['user_input']
+        )
         user_input.send_keys(self.user)
         # select fiscal year
         log.debug(f'Selecting fiscal year ({self.fiscal_year})')
         fiscal_year_select = self.driver.find_element_by_id(
             login_form_ids['fiscal_year_select']
         )
-        Select(fiscal_year_select).select_by_visible_text(str(self.fiscal_year))
+        Select(fiscal_year_select).select_by_visible_text(
+            str(self.fiscal_year)
+        )
         # try to insert password
         for attempt in range(1, 4):
             try:
@@ -156,18 +169,22 @@ class SiafeClient:
                 )
                 password_value = password_input.get_attribute('value')
                 assert len(password_value) == len(self._password)
-                time.sleep(5)
+                time.sleep(2)
             except (AssertionError, NoSuchAttributeException):
                 password_input.send_keys(self._password)
         # submit
         log.debug('Submiting credentials')
-        submit_button = self.driver.find_element_by_id(login_form_ids['submit_button'])
+        submit_button = self.driver.find_element_by_id(
+            login_form_ids['submit_button']
+        )
         submit_button.click()
-        time.sleep(5)
+        time.sleep(2)
 
     def greet(self) -> str:
         """Say Hello to user (for checking the connection)"""
-        greetings = self.driver.find_element_by_id(self._greeting_statement_id).text
+        greetings = self.driver.find_element_by_id(
+            self._greeting_statement_id
+        ).text
         return greetings
 
     def reset(self):
@@ -195,7 +212,9 @@ class SiafeClient:
                 # 'ALL' budget management units option
                 available_ugs.append({'id': '000000', 'name': 'TODAS'})
             else:
-                available_ugs.append({'id': ug_splitted[0], 'name': ug_splitted[1]})
+                available_ugs.append(
+                    {'id': ug_splitted[0], 'name': ug_splitted[1]}
+                )
         # make available units accessible instance-wide
         self._available_ugs = available_ugs
         return self._available_ugs
@@ -257,7 +276,9 @@ class SiafeClient:
         target_options_texts = list(filter(regexpr.match, ug_options_texts))
         # manage when number of matches != 1
         if len(target_options_texts) == 0:
-            log.error('No budget Management Unit was found with given criteria')
+            log.error(
+                'No budget Management Unit was found with given criteria'
+            )
             raise ValueError
         elif len(target_options_texts) > 1:
             log.error(
@@ -344,10 +365,10 @@ class ExecutionPanel(SiafeClient):
     @property
     def description(self):
         """Panel description"""
-        self._description = self.driver.find_element_by_xpath(
+        description = self.driver.find_element_by_xpath(
             r"//div[@id='pt1:pt_pgl4::c']/span"
         ).text
-        return self._description
+        return description
 
 
 class BudgetExecutionSubpanel(ExecutionPanel):
@@ -357,7 +378,7 @@ class BudgetExecutionSubpanel(ExecutionPanel):
     the Anual Budget Bill (LOA).
     """
 
-    _component_ids = {
+    _table_ids = {
         'allocation_details': 'pt1:pt_np2:0:pt_cni3',
         'quota_releasing': 'pt1:pt_np2:1:pt_cni3',
         'credit_descentralization': 'pt1:pt_np2:2:pt_cni3',
@@ -371,5 +392,153 @@ class BudgetExecutionSubpanel(ExecutionPanel):
 
     def __init__(self, client: SiafeClient):
         ExecutionPanel.__init__(self, client)
-        subpanel_tab = self.driver.find_element_by_id(self._subpanel_ids['budgetary'])
+        subpanel_tab = self.driver.find_element_by_id(
+            self._subpanel_ids['budgetary']
+        )
         subpanel_tab.click()
+
+
+class CommitmentNotesTable(BudgetExecutionSubpanel):
+    """A collection of Commitment Notes."""
+
+    _cells_selector = ".xzv, .xzx"
+    """CSS selector for cells with records data."""
+
+    _filter_menu_id = 'pt1:tblDocumento:sdtFilter::body'
+    """Element ID for the page <div> in which the "Filter menu" is contained.
+    """
+
+    _filter_menu_toggler_id = 'pt1:tblDocumento:sdtFilter::disAcr'
+    """Element ID used for the button that toggles/collapses the filter menu.
+    """
+
+    _headers_class = 'x19p'
+    """Class for table headers, containing the legible names of the fields."""
+
+    _limit_checkbox_id = 'pt1:tblDocumento:chkRemoveLimit::content'
+    """Element ID for the checkbox that enables or disables the limit in the
+        number of observations shown in the table.
+    """
+
+    _loaded_table_class = "xza"
+    """Class for the table with loaded records (with no headers)."""
+
+    _rows_class = 'xzy'
+    """Class for individual records in the table."""
+
+    _scroller_id = "pt1:tblDocumento:tabViewerDec::scroller"
+    """Element ID for the scrollable div where registries are shown.
+    """
+
+    def __init__(self, client=SiafeClient):
+        BudgetExecutionSubpanel.__init__(self, client)
+        table_link = self.driver.find_element_by_id(
+            self._table_ids['commitment_note']
+        )
+        table_link.click()
+        self.limit = False
+
+    def _switch_limit(self) -> None:
+        """Place/remove the limit on the number of displayed notes."""
+        limit_checkbox = self.driver.find_element_by_id(
+            self._limit_checkbox_id
+        )
+        limit_checkbox.click()
+
+    @property
+    def description(self):
+        # tables do not have a description; overwrite parent's property
+        self._description = None
+        return self._description
+
+    @property
+    def limit(self) -> bool:
+        """Get the current state of the number of notes displayed (limited or not)."""
+        limit_checkbox = self.driver.find_element_by_id(
+            self._limit_checkbox_id
+        )
+        limit_checkbox_status = limit_checkbox.get_attribute('checked')
+        if limit_checkbox_status is None:
+            self._limit = True
+            return self._limit
+        else:
+            self._limit = False
+            return self._limit
+
+    @limit.setter
+    def limit(self, value: bool) -> None:
+        """Choose whether to show all notes (False) or only the first 1000 (True)."""
+        if self.limit != value:
+            self._switch_limit()
+            self._limit = value
+
+    @property
+    def filter_menu(self):
+        return FilterMenu(self)
+
+    @cached_property
+    def properties(self) -> Sequence[str]:
+        """Get note properties."""
+        table_headers = self.driver.find_elements_by_class_name(
+            self._headers_class
+        )
+        properties = [column_header.text for column_header in table_headers]
+        self._properties = properties
+        return self._properties
+
+    def _scroll(self) -> None:
+        """Scroll records table, so that more records are loaded"""
+        loaded_table = self.driver.find_element_by_class_name(
+            self._loaded_table_class
+        )
+        scroll_by = loaded_table.size["height"]
+        self.driver.execute_script(
+            f"document.getElementById('{self._scroller_id}').scrollBy({{"
+            + f"top: {scroll_by}, left: 0, behavior: 'smooth'}});"
+        )
+        time.sleep(5)
+
+    @cached_property
+    def records(self):
+        """List all records for table."""
+
+        # remove records limit
+        self.limit = False
+
+        records = list()
+        while True:
+            # save number of records before adding the ones in the screen
+            records_num = len(records)
+
+            # read records in the current screen
+            loaded_table = self.driver.find_element_by_class_name(
+                self._loaded_table_class
+            )
+            row_elements = loaded_table.find_elements_by_class_name(
+                self._rows_class
+            )
+            for row_element in row_elements:
+                record = dict()
+                cell_elements = row_element.find_elements_by_css_selector(
+                    self._cells_selector
+                )
+                cell_values = [
+                    cell_element.text for cell_element in cell_elements
+                ]
+                # save to `records` variable
+                for index, value in enumerate(cell_values):
+                    property_ = self.properties[index]
+                    record[property_] = value
+                if record not in records:
+                    records.append(record)
+                    print(record)
+
+            # check if anything new was added
+            if len(records) == records_num:  # break if not
+                break
+            else:  # keep scrolling if so
+                self._scroll()
+                # BUG: Siafe reloads "Budgetary Execution" page instead of
+                # fetching new records.
+
+        return records

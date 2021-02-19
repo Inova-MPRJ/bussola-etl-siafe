@@ -15,6 +15,7 @@ python = "^3.9"
 # Package's requirements
 minilog = "^1.5"
 selenium = "^3.141.0"
+python-dotenv = "^0.15.0"
 
 [tool.poetry.dev-dependencies]
 
@@ -29,6 +30,7 @@ pytest-cov = "*"
 [tool.black]
 
 target-version = ["py36", "py37", "py38"]
+line-length = 79
 skip-string-normalization = true
 
 [build-system]
